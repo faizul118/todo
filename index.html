@@ -6,7 +6,7 @@
   <title>Murgi's Todo</title>
   <style>
     :root{--bg:#fff;--muted:#666;--accent:#0b63ff}
-    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    html,body{height:100%;margin:0;font-family:Inter, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
     body{display:flex;gap:18px;padding:18px;background:var(--bg);color:#111}
     .pane{background:#f8f9fb;border-radius:12px;padding:12px;box-shadow:0 6px 20px rgba(15,15,15,0.04)}
     .left{width:300px;min-width:220px;max-height:calc(100vh - 36px);overflow:auto}
@@ -30,27 +30,35 @@
     .file-actions{display:flex;gap:8px}
     .hidden{display:none}
     @media (max-width:760px){body{flex-direction:column}.left{width:100%;max-height:220px}.right{min-height:300px}}
+    code{background:#fff1c6;padding:2px 6px;border-radius:4px}
   </style>
 </head>
 <body>
   <div class="pane left">
     <h1>Projects</h1>
     <div class="controls">
-      <input id="newProjectName" placeholder="project name (ascii or unicode)" type="text" />
+      <input id="newProjectName" placeholder="project name (ascii, no spaces)" type="text" />
       <button id="createProject">New</button>
     </div>
+    <div class="small" style="margin-bottom:8px">
+      Tip: only the base name is needed — you don't need to type <code>todo_</code> or <code>.txt</code>.
+    </div>
+
     <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
       <button id="refreshList" class="ghost">Refresh</button>
       <span class="small">Files starting with <code>todo_</code></span>
     </div>
     <ul id="fileList" aria-live="polite"></ul>
-    <div class="small" style="margin-top:8px;color:var(--muted)">Tip: you can open a file directly using <code>?file=todo_name.txt</code> in the URL. Add <code>?password=PAT</code> once to populate your PAT (it will be removed from the URL).</div>
+    <div class="small" style="margin-top:8px;color:var(--muted)">Tip: open directly with <code>?file=that</code> (base name) or <code>?file=todo_that.txt</code>.</div>
   </div>
 
   <div class="pane right">
     <div class="meta">
       <input id="password" type="password" placeholder="GitHub PAT (optional)" />
-      <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-left:8px"><input id="rememberPassword" type="checkbox" /> <span>Remember password</span></label>
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-left:8px">
+        <input id="rememberPassword" type="checkbox" /> <span>Remember password</span>
+      </label>
+
       <div style="flex:1"></div>
       <div class="file-actions">
         <button id="commitNotes">Commit</button>
@@ -64,7 +72,16 @@
       <div class="small">SHA: <span id="fileSha">-</span></div>
     </div>
 
-    <textarea spellcheck="false" id="notes" placeholder="Open or create a todo_ file..." ></textarea>
+    <div id="editorArea">
+      <textarea spellcheck="false" id="notes" placeholder="Open or create a todo_ file..."></textarea>
+    </div>
+
+    <div id="emptyState" class="small" style="padding:24px;text-align:center;display:none">
+      <p style="font-size:16px;margin:0 0 12px">No file open — create a new todo file to get started.</p>
+      <input id="emptyName" placeholder="name (e.g. myproject)" style="padding:8px;border-radius:8px;border:1px solid #ddd;margin-bottom:8px;width:60%" />
+      <div class="small" style="margin-bottom:8px">Tip: only the base name is needed — you don't need to type <code>todo_</code> or <code>.txt</code>. ASCII only, no spaces.</div>
+      <div><button id="createProjectEmpty">Create</button></div>
+    </div>
   </div>
 
   <script>
@@ -73,7 +90,9 @@
     const REPO = 'todo';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}/contents`;
     const BASE_TITLE = "Murgi's Todo";
+    const SAVED_KEY = 'murgi_todo_saved_password';
     const LAST_FILE_KEY = 'murgi_todo_last_file';
+
     // beforeunload handler to prevent closing when there are unsaved changes
     function beforeUnloadHandler(e){
       e.preventDefault();
@@ -91,11 +110,28 @@
     }
     // initialize title
     document.title = BASE_TITLE;
-    // ------------------------------------------------
 
-    // Helpers for unicode-safe base64
+    // helpers
+    function getBaseName(fileName){
+      if(!fileName) return '';
+      if(fileName.startsWith('todo_')) fileName = fileName.slice(5);
+      if(fileName.endsWith('.txt')) fileName = fileName.slice(0, -4);
+      return fileName;
+    }
+
+    function makeFullFilename(input){
+      if(!input) return null;
+      let name = input.trim();
+      if(name.startsWith('todo_') && name.endsWith('.txt')) return name;
+      if(name.startsWith('todo_')) name = name.slice(5);
+      if(name.endsWith('.txt')) name = name.slice(0, -4);
+      // allow only ascii letters, numbers, hyphen and underscore, no spaces
+      if(!/^[A-Za-z0-9_-]+$/.test(name)) return null;
+      return 'todo_' + name + '.txt';
+    }
+
+    // Unicode-safe base64 helpers
     function b64EncodeUnicode(str){
-      // from MDN: encode Unicode to base64
       return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1){
         return String.fromCharCode('0x' + p1);
       }));
@@ -118,8 +154,9 @@
     const currentFileEl = document.getElementById('currentFile');
     const fileShaEl = document.getElementById('fileSha');
     const downloadBtn = document.getElementById('download');
+    const rememberCheckbox = document.getElementById('rememberPassword');
 
-    let fileSha = ''; // sha of currently opened file
+    let fileSha = '';
     let currentFile = null;
     let originalContent = '';
 
@@ -127,16 +164,6 @@
       statusMessage.textContent = text || '';
       statusMessage.className = className || '';
     }
-
-function updateUIForFileOpen(isOpen){
-  const editorArea = document.getElementById('editorArea');
-  const emptyState = document.getElementById('emptyState');
-  if(editorArea && emptyState){
-    editorArea.hidden = !isOpen;
-    emptyState.hidden = isOpen;
-  }
-}
-
 
     // Read query params; if password present, populate and remove from URL
     function getQueryParams(){
@@ -166,14 +193,14 @@ function updateUIForFileOpen(isOpen){
           return;
         }
         const data = await resp.json();
-        const todos = data.filter(item => item.type === 'file' && item.name.startsWith('todo_'))
+        const todos = data.filter(item => item.type === 'file' && item.name && item.name.startsWith('todo_'))
                            .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
         if(todos.length === 0){
           const li = document.createElement('li'); li.textContent = '(no todo_ files)'; li.classList.add('small'); fileListEl.appendChild(li);
         }
         for(const file of todos){
           const li = document.createElement('li');
-          const span = document.createElement('span'); span.className='filename'; span.textContent = file.name;
+          const span = document.createElement('span'); span.className='filename'; span.textContent = getBaseName(file.name) + '.txt';
           li.appendChild(span);
           const meta = document.createElement('span'); meta.className='small'; meta.textContent = file.sha ? file.sha.slice(0,7) : '';
           li.appendChild(meta);
@@ -189,17 +216,29 @@ function updateUIForFileOpen(isOpen){
 
     async function openFile(fileName){
       if(!fileName) return;
-      setStatus('⏳ Fetching ' + fileName + '...');
+      // accept a base name like "that" as well
+      let target = fileName;
+      if(!/^todo_[^\\s]+\\.txt$/.test(target) && !/^todo_[^\\s]+$/.test(target) && !/\\.txt$/.test(target)){
+        // maybe user provided base name like "that"
+        const full = makeFullFilename(target);
+        if(full) target = full;
+      } else if(!/^todo_/.test(target) || !/\\.txt$/.test(target)){
+        // normalize cases like "that.txt" or "todo_that"
+        const full = makeFullFilename(target);
+        if(full) target = full;
+      }
+
+      setStatus('⏳ Fetching ' + target + '...');
       try{
         const headers = {'Accept':'application/vnd.github.v3+json'};
         if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
-        const resp = await fetch(`${API_BASE}/${encodeURIComponent(fileName)}`, {headers});
-        if (resp.status === 404){
+        const resp = await fetch(`${API_BASE}/${encodeURIComponent(target)}`, {headers});
+        if(resp.status === 404){
           currentFile = null; fileSha=''; currentFileEl.textContent='(none)'; fileShaEl.textContent='-'; notesTextarea.value=''; originalContent='';
-          setStatus('❎ Not found: ' + fileName, 'error');
-          // update url so user can see failure
+          setStatus('❎ Not found: ' + target, 'error');
+          // update url so user can see failure (use base)
           const params = new URLSearchParams(window.location.search);
-          params.set('file', fileName);
+          params.set('file', getBaseName(target));
           window.history.pushState({}, document.title, window.location.pathname + '?' + params.toString());
           updateUIForFileOpen(false);
           return;
@@ -214,17 +253,16 @@ function updateUIForFileOpen(isOpen){
         originalContent = content;
         fileSha = data.sha;
         currentFile = data.name;
-        currentFileEl.textContent = currentFile;
+        currentFileEl.textContent = getBaseName(currentFile) + '.txt';
         fileShaEl.textContent = fileSha.slice(0,12);
         setStatus('✅ Loaded ' + currentFile, 'ok');
-        // loaded from server -> no unsaved changes
-        setUnsavedFlag(false);
-        try{ localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
-        updateUIForFileOpen(true);
-        // update url (but do not include password)
+        // update url with base name
         const params = new URLSearchParams(window.location.search);
-        params.set('file', currentFile);
+        params.set('file', getBaseName(currentFile));
         window.history.pushState({}, document.title, window.location.pathname + '?' + params.toString());
+        try{ localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
+        setUnsavedFlag(false);
+        updateUIForFileOpen(true);
       }catch(err){
         console.error(err);
         setStatus('❎ Unknown error while opening file', 'error');
@@ -232,13 +270,15 @@ function updateUIForFileOpen(isOpen){
     }
 
     async function createProject(){
-      let name = newProjectNameInput.value.trim();
-      if(!name){ name = prompt('Project name:'); if(!name) return; }
-      // sanitize: replace spaces with '_' and remove problematic slashes
-      name = name.replace(/\s+/g,'_').replace(/[\\/]+/g,'-');
-      if(!name.startsWith('todo_')) name = 'todo_' + name;
-      // append .txt if missing
-      if(!/\.\w+$/.test(name)) name = name + '.txt';
+      let input = newProjectNameInput.value.trim();
+      if(!input){ input = prompt('Project name:'); if(!input) return; }
+      // normalize to full filename and validate
+      const full = makeFullFilename(input);
+      if(!full){
+        setStatus('❎ Invalid name — use ASCII letters, numbers, hyphen or underscore, no spaces', 'error');
+        return;
+      }
+      let name = full;
 
       // create empty file
       setStatus('⏳ Creating ' + name + '...');
@@ -251,13 +291,13 @@ function updateUIForFileOpen(isOpen){
           const data = await resp.json();
           fileSha = data.content.sha;
           currentFile = data.content.name;
-          currentFileEl.textContent = currentFile;
+          currentFileEl.textContent = getBaseName(currentFile) + '.txt';
           fileShaEl.textContent = fileSha.slice(0,12);
           notesTextarea.value = '';
           originalContent = '';
           setStatus('✅ Created ' + currentFile, 'ok');
+          try{ localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
           await listTodoFiles();
-          // open it
           openFile(currentFile);
         } else {
           const txt = await resp.text();
@@ -290,16 +330,16 @@ function updateUIForFileOpen(isOpen){
         fileShaEl.textContent = fileSha.slice(0,12);
         originalContent = notes;
         setStatus('✅ Commit OK', 'ok');
-        // clear unsaved flag because we've just saved
-        setUnsavedFlag(false);
-        try{ if(currentFile) localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
-        // save password to localStorage if user asked to remember it
+        // save password if asked
         try{
           const rem = document.getElementById('rememberPassword');
           if(rem && rem.checked && passwordInput.value){
             localStorage.setItem(SAVED_KEY, passwordInput.value);
           }
         }catch(e){ console.warn('save password failed', e); }
+        // remember last file
+        try{ if(currentFile) localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
+        setUnsavedFlag(false);
         await listTodoFiles();
       }catch(err){
         console.error(err);
@@ -312,15 +352,16 @@ function updateUIForFileOpen(isOpen){
       if(!currentFile) return alert('No file open');
       const blob = new Blob([notesTextarea.value], {type:'text/plain;charset=utf-8'});
       const url = URL.createObjectURL(blob);
-      const a = document.createElement('a'); a.href=url; a.download = currentFile; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+      const a = document.createElement('a'); a.href=url; a.download = getBaseName(currentFile) + '.txt'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
     }
 
-    // Toggle checkboxes keyboard shortcut (Alt + ArrowRight) - keep behaviour from original
+    // Toggle checkboxes keyboard shortcut (Alt + ArrowRight)
     function handleCheckboxToggle(event){
       if(event.altKey && event.key === 'ArrowRight'){
         event.preventDefault();
         const textarea = notesTextarea;
         const start = textarea.selectionStart;
+        const end = textarea.selectionEnd;
         const lines = textarea.value.split('\n');
         let currentLineIndex = textarea.value.substring(0, start).split('\n').length - 1;
         let currentLine = lines[currentLineIndex];
@@ -338,6 +379,7 @@ function updateUIForFileOpen(isOpen){
         }
 
         textarea.value = lines.join('\n');
+
         const newLineStart = textarea.value.split('\n').slice(0, currentLineIndex).join('\n').length + (currentLineIndex > 0 ? 1 : 0);
         let newCursorPos = start + cursorShift;
         const lineLength = lines[currentLineIndex].length;
@@ -346,6 +388,7 @@ function updateUIForFileOpen(isOpen){
         } else if (start === newLineStart + lineLength - cursorShift) {
           newCursorPos = start + cursorShift;
         }
+
         textarea.setSelectionRange(newCursorPos, newCursorPos);
         textarea.dispatchEvent(new Event('input'));
       }
@@ -387,31 +430,15 @@ function updateUIForFileOpen(isOpen){
       textarea.dispatchEvent(new Event('input'));
     }
 
-    // input change -> mark modified
-    notesTextarea.addEventListener('input', () => {
-      const unsaved = notesTextarea.value !== originalContent;
-      if(unsaved){
-        setStatus('✏️ Unsaved changes', 'modified');
-      } else {
-        setStatus('');
-      }
-      setUnsavedFlag(unsaved);
-    });
-
-    // keyboard shortcuts
-    notesTextarea.addEventListener('keydown', handleCheckboxToggle);
-    notesTextarea.addEventListener('keydown', handleBulletTransform);
-
     // Tab insertion and smart backspace behavior:
-    // - Pressing Tab inserts a tab character (	) at the cursor and moves the cursor after it.
-    // - Pressing Backspace when immediately after a tab removes the tab in one go.
-    // - Pressing Backspace when immediately after 4 spaces removes all 4 spaces in one go.
+    // - Pressing Tab inserts four literal spaces.
+    // - Pressing Backspace when immediately after 4 spaces removes them as a unit.
     function handleTabAndBackspace(e){
       const textarea = notesTextarea;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
-      // Handle Tab key: insert FOUR literal spaces
+      // Handle Tab key: insert four literal spaces
       if(e.key === 'Tab'){
         e.preventDefault();
         if(typeof e.stopImmediatePropagation === 'function') try{ e.stopImmediatePropagation(); }catch(err){}
@@ -444,13 +471,26 @@ function updateUIForFileOpen(isOpen){
       }
     }
 
+    // input change -> mark modified + update title unsaved flag
+    notesTextarea.addEventListener('input', () => {
+      const unsaved = notesTextarea.value !== originalContent;
+      if(unsaved){
+        setStatus('✏️ Unsaved changes', 'modified');
+      } else {
+        setStatus('');
+      }
+      setUnsavedFlag(unsaved);
+    });
+
+    // keyboard shortcuts
+    notesTextarea.addEventListener('keydown', handleCheckboxToggle);
+    notesTextarea.addEventListener('keydown', handleBulletTransform);
     notesTextarea.addEventListener('keydown', handleTabAndBackspace);
 
-    // Ctrl/Cmd+S to save
+    // Ctrl/Cmd+S to save -> trigger commit button
     window.addEventListener('keydown', (e)=>{
       if((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 's'){
         e.preventDefault();
-        // trigger the commit button (this will also call commitNotes())
         if(typeof commitNotesButton !== 'undefined' && commitNotesButton){
           commitNotesButton.click();
         } else {
@@ -461,6 +501,10 @@ function updateUIForFileOpen(isOpen){
 
     // UI actions
     createProjectBtn.addEventListener('click', createProject);
+    refreshListBtn.addEventListener('click', listTodoFiles);
+    commitNotesButton.addEventListener('click', commitNotes);
+    downloadBtn.addEventListener('click', downloadCurrent);
+
     const createEmptyBtn = document.getElementById('createProjectEmpty');
     if(createEmptyBtn){
       createEmptyBtn.addEventListener('click', ()=>{
@@ -469,9 +513,20 @@ function updateUIForFileOpen(isOpen){
         createProject();
       });
     }
-    refreshListBtn.addEventListener('click', listTodoFiles);
-    commitNotesButton.addEventListener('click', commitNotes);
-    downloadBtn.addEventListener('click', downloadCurrent);
+
+    // remember password checkbox behavior + restore saved password
+    try{
+      const saved = localStorage.getItem(SAVED_KEY);
+      if(saved && passwordInput){
+        passwordInput.value = saved;
+        if(rememberCheckbox) rememberCheckbox.checked = true;
+      }
+      if(rememberCheckbox){
+        rememberCheckbox.addEventListener('change', (ev)=>{
+          if(!ev.target.checked){ localStorage.removeItem(SAVED_KEY); }
+        });
+      }
+    }catch(e){ console.warn('could not access localStorage', e); }
 
     // When popstate (back/forward) - reload file param
     window.addEventListener('popstate', ()=>{
@@ -480,24 +535,27 @@ function updateUIForFileOpen(isOpen){
       if(f) openFile(f);
     });
 
-    // On load
-    const SAVED_KEY = 'murgi_todo_saved_password';
-    // restore saved password if present
-    try{
-      const saved = localStorage.getItem(SAVED_KEY);
-      const remEl = document.getElementById('rememberPassword');
-      if(saved && passwordInput){ passwordInput.value = saved; if(remEl) remEl.checked = true; }
-      if(remEl){
-        remEl.addEventListener('change', (ev)=>{
-          if(!ev.target.checked){ localStorage.removeItem(SAVED_KEY); }
-        });
+    function updateUIForFileOpen(isOpen){
+      const editorArea = document.getElementById('editorArea');
+      const emptyState = document.getElementById('emptyState');
+      if(editorArea && emptyState){
+        editorArea.hidden = !isOpen;
+        emptyState.hidden = isOpen;
+        if(!isOpen){
+          currentFileEl.textContent = '(none)';
+        }
       }
-    }catch(e){ console.warn('could not access localStorage', e); }
+    }
 
+    // On load
     (async function(){
       const {file} = getQueryParams();
       await listTodoFiles();
-      if(file){ openFile(file); }
+      if(file){ openFile(file); return; }
+      // if there's a last file recorded in localStorage, open it
+      try{ const last = localStorage.getItem(LAST_FILE_KEY); if(last){ openFile(last); return; } }catch(e){}
+      // show empty state (no file open)
+      updateUIForFileOpen(false);
     })();
 
   </script>
