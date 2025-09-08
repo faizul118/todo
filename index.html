@@ -50,6 +50,7 @@
   <div class="pane right">
     <div class="meta">
       <input id="password" type="password" placeholder="GitHub PAT (optional)" />
+      <label style="display:flex;align-items:center;gap:8px;font-size:14px;margin-left:8px"><input id="rememberPassword" type="checkbox" /> <span>Remember password</span></label>
       <div style="flex:1"></div>
       <div class="file-actions">
         <button id="commitNotes">Commit</button>
@@ -255,6 +256,13 @@
         fileShaEl.textContent = fileSha.slice(0,12);
         originalContent = notes;
         setStatus('✅ Commit OK', 'ok');
+        // save password to localStorage if user asked to remember it
+        try{
+          const rem = document.getElementById('rememberPassword');
+          if(rem && rem.checked && passwordInput.value){
+            localStorage.setItem(SAVED_KEY, passwordInput.value);
+          }
+        }catch(e){ console.warn('save password failed', e); }
         await listTodoFiles();
       }catch(err){
         console.error(err);
@@ -355,6 +363,57 @@
     notesTextarea.addEventListener('keydown', handleCheckboxToggle);
     notesTextarea.addEventListener('keydown', handleBulletTransform);
 
+    // Tab insertion and smart backspace behavior:
+    // - Pressing Tab inserts a tab character (\t) at the cursor and moves the cursor after it.
+    // - Pressing Backspace when immediately after a tab removes the tab in one go.
+    // - Pressing Backspace when immediately after 4 spaces removes all 4 spaces in one go.
+    function handleTabAndBackspace(e){
+      const textarea = notesTextarea;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+
+      // Handle Tab key: insert a tab character (\t) which visually is equivalent to 4 spaces in many editors
+      if(e.key === 'Tab'){
+        e.preventDefault();
+        const tabChar = '\\t';
+        const before = textarea.value.slice(0, start);
+        const after = textarea.value.slice(end);
+        textarea.value = before + tabChar + after;
+        const pos = start + 1; // \t is one character
+        textarea.setSelectionRange(pos, pos);
+        textarea.dispatchEvent(new Event('input'));
+        return;
+      }
+
+      // Smart backspace: if cursor is right after a tab char or 4 spaces, remove them as a unit
+      if(e.key === 'Backspace' && start === end && start > 0){
+        // previous char is a tab
+        const prevChar = textarea.value.charAt(start - 1);
+        if(prevChar === '\\t'){
+          e.preventDefault();
+          const before = textarea.value.slice(0, start - 1);
+          const after = textarea.value.slice(end);
+          textarea.value = before + after;
+          textarea.setSelectionRange(start - 1, start - 1);
+          textarea.dispatchEvent(new Event('input'));
+          return;
+        }
+        // or previous four chars are spaces
+        const prev4 = textarea.value.slice(Math.max(0, start - 4), start);
+        if(prev4 === '    '){
+          e.preventDefault();
+          const before = textarea.value.slice(0, start - 4);
+          const after = textarea.value.slice(end);
+          textarea.value = before + after;
+          textarea.setSelectionRange(start - 4, start - 4);
+          textarea.dispatchEvent(new Event('input'));
+          return;
+        }
+      }
+    }
+
+    notesTextarea.addEventListener('keydown', handleTabAndBackspace);
+
     // Ctrl/Cmd+S to save
     window.addEventListener('keydown', (e)=>{
       if((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 's'){
@@ -382,6 +441,19 @@
     });
 
     // On load
+    const SAVED_KEY = 'murgi_todo_saved_password';
+    // restore saved password if present
+    try{
+      const saved = localStorage.getItem(SAVED_KEY);
+      const remEl = document.getElementById('rememberPassword');
+      if(saved && passwordInput){ passwordInput.value = saved; if(remEl) remEl.checked = true; }
+      if(remEl){
+        remEl.addEventListener('change', (ev)=>{
+          if(!ev.target.checked){ localStorage.removeItem(SAVED_KEY); }
+        });
+      }
+    }catch(e){ console.warn('could not access localStorage', e); }
+
     (async function(){
       const {file} = getQueryParams();
       await listTodoFiles();
