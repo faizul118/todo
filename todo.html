@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Todo — Murgi's Notes</title>
+  <style>
+    :root{--bg:#fff;--muted:#666;--accent:#0b63ff}
+    html,body{height:100%;margin:0;font-family:Inter, ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial}
+    body{display:flex;gap:18px;padding:18px;background:var(--bg);color:#111}
+    .pane{background:#f8f9fb;border-radius:12px;padding:12px;box-shadow:0 6px 20px rgba(15,15,15,0.04)}
+    .left{width:300px;min-width:220px;max-height:calc(100vh - 36px);overflow:auto}
+    .right{flex:1;display:flex;flex-direction:column;min-height:400px}
+    h1{font-size:18px;margin:0 0 8px}
+    .controls{display:flex;gap:8px;margin-bottom:8px}
+    input[type="text"], input[type="password"]{padding:8px;border-radius:8px;border:1px solid #ddd;flex:1}
+    button{padding:8px 12px;border-radius:8px;border:0;background:var(--accent);color:#fff;cursor:pointer}
+    button.ghost{background:transparent;color:var(--accent);border:1px solid #e6eefc}
+    ul{list-style:none;padding:0;margin:8px 0}
+    li{padding:8px;border-radius:8px;display:flex;justify-content:space-between;align-items:center;cursor:pointer}
+    li:hover{background:rgba(11,99,255,0.06)}
+    .filename{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .status{font-weight:600;margin-bottom:8px}
+    textarea{width:100%;height:calc(100vh - 240px);resize:vertical;padding:12px;border-radius:8px;border:1px solid #e6e6e6;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
+    .meta{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .small{font-size:13px;color:var(--muted)}
+    .error{color:#b00020}
+    .ok{color:green}
+    .modified{color:orange}
+    .file-actions{display:flex;gap:8px}
+    .hidden{display:none}
+    @media (max-width:760px){body{flex-direction:column}.left{width:100%;max-height:220px}.right{min-height:300px}}
+  </style>
+</head>
+<body>
+  <div class="pane left">
+    <h1>Projects</h1>
+    <div class="controls">
+      <input id="newProjectName" placeholder="project name (ascii or unicode)" type="text" />
+      <button id="createProject">New</button>
+    </div>
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <button id="refreshList" class="ghost">Refresh</button>
+      <span class="small">Files starting with <code>todo_</code></span>
+    </div>
+    <ul id="fileList" aria-live="polite"></ul>
+    <div class="small" style="margin-top:8px;color:var(--muted)">Tip: you can open a file directly using <code>?file=todo_name.txt</code> in the URL. Add <code>?password=PAT</code> once to populate your PAT (it will be removed from the URL).</div>
+  </div>
+
+  <div class="pane right">
+    <div class="meta">
+      <input id="password" type="password" placeholder="GitHub PAT (optional)" />
+      <div style="flex:1"></div>
+      <div class="file-actions">
+        <button id="commitNotes">Commit</button>
+        <button id="download" class="ghost">Download</button>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+    <div style="display:flex;gap:12px;align-items:center;margin-bottom:8px">
+      <div class="small">Editing: <b id="currentFile">(none)</b></div>
+      <div class="small">SHA: <span id="fileSha">-</span></div>
+    </div>
+
+    <textarea spellcheck="false" id="notes" placeholder="Open or create a todo_ file..." ></textarea>
+  </div>
+
+  <script>
+    // ------------------ CONFIG -------------------
+    const OWNER = 'faizul118';
+    const REPO = 'notes';
+    const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}/contents`;
+    // ------------------------------------------------
+
+    // Helpers for unicode-safe base64
+    function b64EncodeUnicode(str){
+      // from MDN: encode Unicode to base64
+      return btoa(encodeURIComponent(str).replace(/%([0-9A-F]{2})/g, function(match, p1){
+        return String.fromCharCode('0x' + p1);
+      }));
+    }
+    function b64DecodeUnicode(b64){
+      return decodeURIComponent(Array.prototype.map.call(atob(b64), function(c){
+        return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+      }).join(''));
+    }
+
+    // DOM
+    const fileListEl = document.getElementById('fileList');
+    const newProjectNameInput = document.getElementById('newProjectName');
+    const createProjectBtn = document.getElementById('createProject');
+    const refreshListBtn = document.getElementById('refreshList');
+    const notesTextarea = document.getElementById('notes');
+    const commitNotesButton = document.getElementById('commitNotes');
+    const passwordInput = document.getElementById('password');
+    const statusMessage = document.getElementById('status');
+    const currentFileEl = document.getElementById('currentFile');
+    const fileShaEl = document.getElementById('fileSha');
+    const downloadBtn = document.getElementById('download');
+
+    let fileSha = ''; // sha of currently opened file
+    let currentFile = null;
+    let originalContent = '';
+
+    function setStatus(text, className){
+      statusMessage.textContent = text || '';
+      statusMessage.className = className || '';
+    }
+
+    // Read query params; if password present, populate and remove from URL
+    function getQueryParams(){
+      const params = new URLSearchParams(window.location.search);
+      const password = params.get('password');
+      const file = params.get('file');
+      if(password){
+        passwordInput.value = password;
+        // remove password param but keep others
+        params.delete('password');
+        const newQs = params.toString();
+        const newUrl = window.location.pathname + (newQs ? '?' + newQs : '');
+        window.history.replaceState({}, document.title, newUrl);
+      }
+      return {file};
+    }
+
+    async function listTodoFiles(){
+      setStatus('⏳ Loading file list...');
+      fileListEl.innerHTML = '';
+      try{
+        const headers = {'Accept':'application/vnd.github.v3+json'};
+        if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
+        const resp = await fetch(API_BASE + '/', {headers});
+        if(!resp.ok){
+          setStatus('❎ Error listing repo: ' + resp.status + ' ' + resp.statusText, 'error');
+          return;
+        }
+        const data = await resp.json();
+        const todos = data.filter(item => item.type === 'file' && item.name.startsWith('todo_'))
+                           .sort((a,b)=>a.name.localeCompare(b.name, undefined, {sensitivity:'base'}));
+        if(todos.length === 0){
+          const li = document.createElement('li'); li.textContent = '(no todo_ files)'; li.classList.add('small'); fileListEl.appendChild(li);
+        }
+        for(const file of todos){
+          const li = document.createElement('li');
+          const span = document.createElement('span'); span.className='filename'; span.textContent = file.name;
+          li.appendChild(span);
+          const meta = document.createElement('span'); meta.className='small'; meta.textContent = file.sha ? file.sha.slice(0,7) : '';
+          li.appendChild(meta);
+          li.addEventListener('click', ()=>{ openFile(file.name); });
+          fileListEl.appendChild(li);
+        }
+        setStatus('✅ File list loaded', 'ok');
+      }catch(err){
+        console.error(err);
+        setStatus('❎ Network or unknown error while listing files', 'error');
+      }
+    }
+
+    async function openFile(fileName){
+      if(!fileName) return;
+      setStatus('⏳ Fetching ' + fileName + '...');
+      try{
+        const headers = {'Accept':'application/vnd.github.v3+json'};
+        if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
+        const resp = await fetch(`${API_BASE}/${encodeURIComponent(fileName)}`, {headers});
+        if(resp.status === 404){
+          currentFile = null; fileSha=''; currentFileEl.textContent='(none)'; fileShaEl.textContent='-'; notesTextarea.value=''; originalContent='';
+          setStatus('❎ Not found: ' + fileName, 'error');
+          // update url so user can see failure
+          const params = new URLSearchParams(window.location.search);
+          params.set('file', fileName);
+          window.history.pushState({}, document.title, window.location.pathname + '?' + params.toString());
+          return;
+        }
+        if(!resp.ok){
+          setStatus('❎ Error fetching file: ' + resp.status + ' ' + resp.statusText, 'error');
+          return;
+        }
+        const data = await resp.json();
+        const content = data.content ? b64DecodeUnicode(data.content.replace(/\n/g,'')) : '';
+        notesTextarea.value = content;
+        originalContent = content;
+        fileSha = data.sha;
+        currentFile = data.name;
+        currentFileEl.textContent = currentFile;
+        fileShaEl.textContent = fileSha.slice(0,12);
+        setStatus('✅ Loaded ' + currentFile, 'ok');
+        // update url (but do not include password)
+        const params = new URLSearchParams(window.location.search);
+        params.set('file', currentFile);
+        window.history.pushState({}, document.title, window.location.pathname + '?' + params.toString());
+      }catch(err){
+        console.error(err);
+        setStatus('❎ Unknown error while opening file', 'error');
+      }
+    }
+
+    async function createProject(){
+      let name = newProjectNameInput.value.trim();
+      if(!name){ name = prompt('Project name:'); if(!name) return; }
+      // sanitize: replace spaces with '_' and remove problematic slashes
+      name = name.replace(/\s+/g,'_').replace(/[\\/]+/g,'-');
+      if(!name.startsWith('todo_')) name = 'todo_' + name;
+      // append .txt if missing
+      if(!/\.\w+$/.test(name)) name = name + '.txt';
+
+      // create empty file
+      setStatus('⏳ Creating ' + name + '...');
+      try{
+        const headers = {'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+        if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
+        const body = JSON.stringify({message: 'Create ' + name, content: b64EncodeUnicode('')});
+        const resp = await fetch(`${API_BASE}/${encodeURIComponent(name)}`, {method:'PUT', headers, body});
+        if(resp.status === 201 || resp.ok){
+          const data = await resp.json();
+          fileSha = data.content.sha;
+          currentFile = data.content.name;
+          currentFileEl.textContent = currentFile;
+          fileShaEl.textContent = fileSha.slice(0,12);
+          notesTextarea.value = '';
+          originalContent = '';
+          setStatus('✅ Created ' + currentFile, 'ok');
+          await listTodoFiles();
+          // open it
+          openFile(currentFile);
+        } else {
+          const txt = await resp.text();
+          setStatus('❎ Create failed: ' + resp.status + ' ' + resp.statusText + ' - ' + txt, 'error');
+        }
+      }catch(err){
+        console.error(err);
+        setStatus('❎ Unknown error creating project', 'error');
+      }
+    }
+
+    async function commitNotes(){
+      if(!currentFile){ setStatus('⚠️ No file open to commit', 'error'); return; }
+      const notes = notesTextarea.value;
+      if(notes === originalContent){ setStatus('⚠️ Nothing to commit', 'modified'); return; }
+      setStatus('⏳ Committing ' + currentFile + '...');
+      try{
+        const headers = {'Content-Type':'application/json','Accept':'application/vnd.github.v3+json'};
+        if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
+        const payload = {message: 'Update ' + currentFile, content: b64EncodeUnicode(notes)};
+        if(fileSha) payload.sha = fileSha;
+        const resp = await fetch(`${API_BASE}/${encodeURIComponent(currentFile)}`, {method:'PUT', headers, body: JSON.stringify(payload)});
+        if(!resp.ok){
+          const txt = await resp.text();
+          setStatus('❎ Commit failed: ' + resp.status + ' ' + resp.statusText + ' - ' + txt, 'error');
+          return;
+        }
+        const data = await resp.json();
+        fileSha = data.content.sha;
+        fileShaEl.textContent = fileSha.slice(0,12);
+        originalContent = notes;
+        setStatus('✅ Commit OK', 'ok');
+        await listTodoFiles();
+      }catch(err){
+        console.error(err);
+        setStatus('❎ Unknown error committing file', 'error');
+      }
+    }
+
+    // Download current content as file
+    function downloadCurrent(){
+      if(!currentFile) return alert('No file open');
+      const blob = new Blob([notesTextarea.value], {type:'text/plain;charset=utf-8'});
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href=url; a.download = currentFile; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    }
+
+    // Toggle checkboxes keyboard shortcut (Alt + ArrowRight) - keep behaviour from original
+    function handleCheckboxToggle(event){
+      if(event.altKey && event.key === 'ArrowRight'){
+        event.preventDefault();
+        const textarea = notesTextarea;
+        const start = textarea.selectionStart;
+        const lines = textarea.value.split('\n');
+        let currentLineIndex = textarea.value.substring(0, start).split('\n').length - 1;
+        let currentLine = lines[currentLineIndex];
+        let cursorShift = 0;
+
+        if (currentLine.startsWith('[ ] ')) {
+          lines[currentLineIndex] = `[x] ${currentLine.substring(4)}`;
+          cursorShift = 0;
+        } else if (currentLine.startsWith('[x] ')) {
+          lines[currentLineIndex] = currentLine.substring(4);
+          cursorShift = -4;
+        } else {
+          lines[currentLineIndex] = `[ ] ${currentLine}`;
+          cursorShift = 4;
+        }
+
+        textarea.value = lines.join('\n');
+        const newLineStart = textarea.value.split('\n').slice(0, currentLineIndex).join('\n').length + (currentLineIndex > 0 ? 1 : 0);
+        let newCursorPos = start + cursorShift;
+        const lineLength = lines[currentLineIndex].length;
+        if (start === newLineStart) {
+          newCursorPos = start + 4;
+        } else if (start === newLineStart + lineLength - cursorShift) {
+          newCursorPos = start + cursorShift;
+        }
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
+        textarea.dispatchEvent(new Event('input'));
+      }
+    }
+
+    // Transform '-' or '*' at start of a new line into a bullet when space is pressed.
+    function handleBulletTransform(e){
+      if(e.key !== ' ') return;
+      const textarea = notesTextarea;
+      const pos = textarea.selectionStart;
+      const lineStart = textarea.value.lastIndexOf('\n', pos-1) + 1;
+      const before = textarea.value.substring(lineStart, pos);
+      // match: optional indentation, optional backslash, then a single - or * as the last char
+      const m = before.match(/^(\s*)(\\?)([-*])$/);
+      if(!m) return;
+      e.preventDefault();
+      const indent = m[1];
+      const escaped = m[2] === '\\';
+      const sym = m[3];
+
+      if(escaped){
+        // remove the escaping backslash and insert the literal symbol + space
+        const newLineStart = indent + sym + ' ';
+        const newValue = textarea.value.slice(0, lineStart) + newLineStart + textarea.value.slice(pos);
+        const newPos = lineStart + newLineStart.length;
+        textarea.value = newValue;
+        textarea.setSelectionRange(newPos, newPos);
+        textarea.dispatchEvent(new Event('input'));
+        return;
+      }
+
+      // replace the symbol with a bullet char
+      const bullet = '•';
+      const newLine = indent + bullet + ' ';
+      const newValue = textarea.value.slice(0, lineStart) + newLine + textarea.value.slice(pos);
+      const newPos = lineStart + newLine.length;
+      textarea.value = newValue;
+      textarea.setSelectionRange(newPos, newPos);
+      textarea.dispatchEvent(new Event('input'));
+    }
+
+    // input change -> mark modified
+    notesTextarea.addEventListener('input', ()=>{
+      if(notesTextarea.value !== originalContent){
+        setStatus('✏️ Unsaved changes', 'modified');
+      } else {
+        setStatus('');
+      }
+    });
+
+    // keyboard shortcuts
+    notesTextarea.addEventListener('keydown', handleCheckboxToggle);
+    notesTextarea.addEventListener('keydown', handleBulletTransform);
+
+    // Ctrl/Cmd+S to save
+    window.addEventListener('keydown', (e)=>{
+      if((e.ctrlKey||e.metaKey) && e.key.toLowerCase() === 's'){
+        e.preventDefault(); commitNotes();
+      }
+    });
+
+    // UI actions
+    createProjectBtn.addEventListener('click', createProject);
+    refreshListBtn.addEventListener('click', listTodoFiles);
+    commitNotesButton.addEventListener('click', commitNotes);
+    downloadBtn.addEventListener('click', downloadCurrent);
+
+    // When popstate (back/forward) - reload file param
+    window.addEventListener('popstate', ()=>{
+      const params = new URLSearchParams(window.location.search);
+      const f = params.get('file');
+      if(f) openFile(f);
+    });
+
+    // On load
+    (async function(){
+      const {file} = getQueryParams();
+      await listTodoFiles();
+      if(file){ openFile(file); }
+    })();
+
+  </script>
+</body>
+</html>
