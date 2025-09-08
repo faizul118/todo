@@ -31,3 +31,4 @@ Born on 20250908_1400
 [x] add v for version Badge
 [x] fix minecraftVersionName not initialized issue
 [ ] add fragileData
+[ ] add bullets for HELP
