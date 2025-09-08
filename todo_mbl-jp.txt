@@ -1,3 +1,32 @@
 Born on 20250908_1400
 
-what a nice day
+[x] make the file input detected message take care of both initial and user given intent~~
+[x] make dex caching option hidden (maybe)~~
+[x] show changelog when app version is changed~~
+[x] fix MB sLoader typo~~
+[ ] finalize chinese localization (coop enderman)
+[ ] add faq button on top right of topbar
+[ ] grey out mbl2 button on x86
+[ ] add arch mismatch dialog and show it at startup
+[x] do the if else toasts for nogui launch (like minecraft is missing)~~ (partially done ig, make sure to toast for x86 mbl2 nogui)
+[x] merge nogui and gui launch code~~
+[ ] remove white bg from splash screen logo and animate it on a12+
+[x] add background with `surface` gradient in FirstRun screen~~
+[ ] remove any remaining artificial delays (except show logs automatically one)
+[x] add changelog inside app~~
+[ ] remove comments
+[ ] add conscrypt fix or whatever
+[ ] discuss with people for ux improvement
+[ ] allow setting custom.png from app (to be implemented: file magic check, image resolution check, image channel or whatever check)
+[ ] ask arc to make a separate channel for development stuff
+[x] centralize todo 
+[ ] start using keepachangelog <https://keepachangelog.com/en/1.0.0/>
+[ ] add a donation button with forbidden electronic coin name and whatever site enderman prefers
+[ ] remove startMoinkraft function, integrate it inside initLauncherUnified
+[x] remove direct launch toast (starting with...)~~
+[x] fix double toast for direct launch (a13, confirmation needed)~~
+[ ] add splash for direct launch A11 and lower
+[ ] add auto update app for github version
+[ ] say "Disabled when Set<String> is empty
+[ ] add v for version Badge
+[ ] fix minecraftVersionName not initialized issue
