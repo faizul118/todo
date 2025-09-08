@@ -28,5 +28,6 @@ Born on 20250908_1400
 [ ] add splash for direct launch A11 and lower
 [ ] add auto update app for github version
 [ ] say "Disabled when Set<String> is empty
-[ ] add v for version Badge
-[ ] fix minecraftVersionName not initialized issue
+[x] add v for version Badge
+[x] fix minecraftVersionName not initialized issue
+[ ] add fragileData
