@@ -30,3 +30,4 @@ Born on 20250908_1400
 [ ] say "Disabled when Set<String> is empty
 [ ] add v for version Badge
 [ ] fix minecraftVersionName not initialized issue
+nice it works now
