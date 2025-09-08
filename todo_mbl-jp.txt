@@ -32,3 +32,7 @@ Born on 20250908_1400
 [x] fix minecraftVersionName not initialized issue
 [ ] add fragileData
 [ ] add bullets for HELP
+[ ] add next branch draco lib to source
+[ ] add other mbl2 libs from gh actions
+[ ] add sha for updated draco and mbl2 to in the loader versions
+[ ] Log draco and mbl2 versions in logs
