@@ -109,6 +109,16 @@
       statusMessage.className = className || '';
     }
 
+function updateUIForFileOpen(isOpen){
+  const editorArea = document.getElementById('editorArea');
+  const emptyState = document.getElementById('emptyState');
+  if(editorArea && emptyState){
+    editorArea.hidden = !isOpen;
+    emptyState.hidden = isOpen;
+  }
+}
+
+
     // Read query params; if password present, populate and remove from URL
     function getQueryParams(){
       const params = new URLSearchParams(window.location.search);
@@ -165,13 +175,14 @@
         const headers = {'Accept':'application/vnd.github.v3+json'};
         if(passwordInput.value) headers['Authorization'] = `Bearer ${passwordInput.value}`;
         const resp = await fetch(`${API_BASE}/${encodeURIComponent(fileName)}`, {headers});
-        if(resp.status === 404){
+        if (resp.status === 404){
           currentFile = null; fileSha=''; currentFileEl.textContent='(none)'; fileShaEl.textContent='-'; notesTextarea.value=''; originalContent='';
           setStatus('❎ Not found: ' + fileName, 'error');
           // update url so user can see failure
           const params = new URLSearchParams(window.location.search);
           params.set('file', fileName);
           window.history.pushState({}, document.title, window.location.pathname + '?' + params.toString());
+          updateUIForFileOpen(false);
           return;
         }
         if(!resp.ok){
@@ -187,6 +198,8 @@
         currentFileEl.textContent = currentFile;
         fileShaEl.textContent = fileSha.slice(0,12);
         setStatus('✅ Loaded ' + currentFile, 'ok');
+        try{ localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
+        updateUIForFileOpen(true);
         // update url (but do not include password)
         const params = new URLSearchParams(window.location.search);
         params.set('file', currentFile);
@@ -256,6 +269,7 @@
         fileShaEl.textContent = fileSha.slice(0,12);
         originalContent = notes;
         setStatus('✅ Commit OK', 'ok');
+        try{ if(currentFile) localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
         // save password to localStorage if user asked to remember it
         try{
           const rem = document.getElementById('rememberPassword');
@@ -364,7 +378,7 @@
     notesTextarea.addEventListener('keydown', handleBulletTransform);
 
     // Tab insertion and smart backspace behavior:
-    // - Pressing Tab inserts a tab character (\t) at the cursor and moves the cursor after it.
+    // - Pressing Tab inserts a tab character (	) at the cursor and moves the cursor after it.
     // - Pressing Backspace when immediately after a tab removes the tab in one go.
     // - Pressing Backspace when immediately after 4 spaces removes all 4 spaces in one go.
     function handleTabAndBackspace(e){
@@ -372,14 +386,14 @@
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
-      // Handle Tab key: insert a tab character (\t) which visually is equivalent to 4 spaces in many editors
+      // Handle Tab key: insert a tab character (	) which visually is equivalent to 4 spaces in many editors
       if(e.key === 'Tab'){
         e.preventDefault();
-        const tabChar = '\\t';
+        const tabChar = '\t';
         const before = textarea.value.slice(0, start);
         const after = textarea.value.slice(end);
         textarea.value = before + tabChar + after;
-        const pos = start + 1; // \t is one character
+        const pos = start + 1; // 	 is one character
         textarea.setSelectionRange(pos, pos);
         textarea.dispatchEvent(new Event('input'));
         return;
@@ -389,7 +403,7 @@
       if(e.key === 'Backspace' && start === end && start > 0){
         // previous char is a tab
         const prevChar = textarea.value.charAt(start - 1);
-        if(prevChar === '\\t'){
+        if(prevChar === '\t'){
           e.preventDefault();
           const before = textarea.value.slice(0, start - 1);
           const after = textarea.value.slice(end);
@@ -429,6 +443,14 @@
 
     // UI actions
     createProjectBtn.addEventListener('click', createProject);
+    const createEmptyBtn = document.getElementById('createProjectEmpty');
+    if(createEmptyBtn){
+      createEmptyBtn.addEventListener('click', ()=>{
+        const v = document.getElementById('emptyName')?.value?.trim();
+        if(v) newProjectNameInput.value = v;
+        createProject();
+      });
+    }
     refreshListBtn.addEventListener('click', listTodoFiles);
     commitNotesButton.addEventListener('click', commitNotes);
     downloadBtn.addEventListener('click', downloadCurrent);
