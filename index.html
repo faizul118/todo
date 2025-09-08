@@ -72,6 +72,25 @@
     const OWNER = 'faizul118';
     const REPO = 'todo';
     const API_BASE = `https://api.github.com/repos/${OWNER}/${REPO}/contents`;
+    const BASE_TITLE = "Murgi's Todo";
+    const LAST_FILE_KEY = 'murgi_todo_last_file';
+    // beforeunload handler to prevent closing when there are unsaved changes
+    function beforeUnloadHandler(e){
+      e.preventDefault();
+      e.returnValue = '';
+    }
+
+    function setUnsavedFlag(unsaved){
+      if(unsaved){
+        if(!document.title.startsWith('• ')) document.title = '• ' + BASE_TITLE;
+        window.addEventListener('beforeunload', beforeUnloadHandler);
+      } else {
+        document.title = BASE_TITLE;
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
+      }
+    }
+    // initialize title
+    document.title = BASE_TITLE;
     // ------------------------------------------------
 
     // Helpers for unicode-safe base64
@@ -198,6 +217,8 @@ function updateUIForFileOpen(isOpen){
         currentFileEl.textContent = currentFile;
         fileShaEl.textContent = fileSha.slice(0,12);
         setStatus('✅ Loaded ' + currentFile, 'ok');
+        // loaded from server -> no unsaved changes
+        setUnsavedFlag(false);
         try{ localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
         updateUIForFileOpen(true);
         // update url (but do not include password)
@@ -269,6 +290,8 @@ function updateUIForFileOpen(isOpen){
         fileShaEl.textContent = fileSha.slice(0,12);
         originalContent = notes;
         setStatus('✅ Commit OK', 'ok');
+        // clear unsaved flag because we've just saved
+        setUnsavedFlag(false);
         try{ if(currentFile) localStorage.setItem(LAST_FILE_KEY, currentFile); }catch(e){}
         // save password to localStorage if user asked to remember it
         try{
@@ -365,12 +388,14 @@ function updateUIForFileOpen(isOpen){
     }
 
     // input change -> mark modified
-    notesTextarea.addEventListener('input', ()=>{
-      if(notesTextarea.value !== originalContent){
+    notesTextarea.addEventListener('input', () => {
+      const unsaved = notesTextarea.value !== originalContent;
+      if(unsaved){
         setStatus('✏️ Unsaved changes', 'modified');
       } else {
         setStatus('');
       }
+      setUnsavedFlag(unsaved);
     });
 
     // keyboard shortcuts
@@ -386,36 +411,29 @@ function updateUIForFileOpen(isOpen){
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
 
-      // Handle Tab key: insert a tab character (	) which visually is equivalent to 4 spaces in many editors
+      // Handle Tab key: insert FOUR literal spaces
       if(e.key === 'Tab'){
         e.preventDefault();
-        const tabChar = '\t';
+        if(typeof e.stopImmediatePropagation === 'function') try{ e.stopImmediatePropagation(); }catch(err){}
+        e.stopPropagation();
+        const spaces = '    ';
         const before = textarea.value.slice(0, start);
         const after = textarea.value.slice(end);
-        textarea.value = before + tabChar + after;
-        const pos = start + 1; // 	 is one character
+        // Insert exactly four spaces
+        textarea.value = before + spaces + after;
+        const pos = start + spaces.length;
         textarea.setSelectionRange(pos, pos);
         textarea.dispatchEvent(new Event('input'));
         return;
       }
 
-      // Smart backspace: if cursor is right after a tab char or 4 spaces, remove them as a unit
+      // Smart backspace: if cursor is right after exactly 4 spaces, remove them as a unit
       if(e.key === 'Backspace' && start === end && start > 0){
-        // previous char is a tab
-        const prevChar = textarea.value.charAt(start - 1);
-        if(prevChar === '\t'){
-          e.preventDefault();
-          const before = textarea.value.slice(0, start - 1);
-          const after = textarea.value.slice(end);
-          textarea.value = before + after;
-          textarea.setSelectionRange(start - 1, start - 1);
-          textarea.dispatchEvent(new Event('input'));
-          return;
-        }
-        // or previous four chars are spaces
         const prev4 = textarea.value.slice(Math.max(0, start - 4), start);
         if(prev4 === '    '){
           e.preventDefault();
+          if(typeof e.stopImmediatePropagation === 'function') try{ e.stopImmediatePropagation(); }catch(err){}
+          e.stopPropagation();
           const before = textarea.value.slice(0, start - 4);
           const after = textarea.value.slice(end);
           textarea.value = before + after;
