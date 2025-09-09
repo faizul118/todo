@@ -5,7 +5,7 @@ Born on 20250908_1400
 [x] show changelog when app version is changed
 [x] fix MB sLoader typo
 [ ] finalize chinese localization (coop enderman)
-[ ] add faq button on top right of topbar
+[x] add faq button on top right of topbar
 [ ] grey out mbl2 button on x86
 [ ] add arch mismatch dialog and show it at startup
 [x] do the if else toasts for nogui launch (like minecraft is missing)~~ (partially done ig, make sure to toast for x86 mbl2 nogui)
