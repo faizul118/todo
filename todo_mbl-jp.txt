@@ -36,3 +36,4 @@ Born on 20250908_1400
 [ ] add other mbl2 libs from gh actions
 [ ] add sha for updated draco and mbl2 to in the loader versions
 [ ] Log draco and mbl2 versions in logs
+[ ] check if maesdk range operator is really correct
