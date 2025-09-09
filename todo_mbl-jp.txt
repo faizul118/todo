@@ -30,7 +30,7 @@ Born on 20250908_1400
 [x] say "Disabled when Set<String> is empty
 [x] add v for version Badge
 [x] fix minecraftVersionName not initialized issue
-[ ] add fragileData
+[x] add fragileData
 [x] add bullets for HELP
 [x] add next branch draco lib to source
 [x] add other mbl2 libs from gh actions
