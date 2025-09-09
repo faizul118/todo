@@ -37,3 +37,4 @@ Born on 20250908_1400
 [x] add sha for updated draco and mbl2 to in the loader versions
 [x] Log draco and mbl2 versions in logs
 [x] check if maesdk range operator is really correct
+[ ] remove minecraft module
