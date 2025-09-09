@@ -25,9 +25,9 @@ Born on 20250908_1400
 [ ] remove startMoinkraft function, integrate it inside initLauncherUnified
 [x] remove direct launch toast (starting with...)
 [x] fix double toast for direct launch (a13, confirmation needed)
-[ ] add splash for direct launch A11 and lower
+[x] add splash for direct launch A11 and lower
 [ ] add auto update app for github version
-[ ] say "Disabled when Set<String> is empty
+[x] say "Disabled when Set<String> is empty
 [x] add v for version Badge
 [x] fix minecraftVersionName not initialized issue
 [ ] add fragileData
@@ -36,4 +36,4 @@ Born on 20250908_1400
 [x] add other mbl2 libs from gh actions
 [x] add sha for updated draco and mbl2 to in the loader versions
 [x] Log draco and mbl2 versions in logs
-[ ] check if maesdk range operator is really correct
+[x] check if maesdk range operator is really correct
