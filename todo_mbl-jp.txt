@@ -10,7 +10,7 @@ Born on 20250908_1400
 [ ] add arch mismatch dialog and show it at startup
 [x] do the if else toasts for nogui launch (like minecraft is missing)~~ (partially done ig, make sure to toast for x86 mbl2 nogui)
 [x] merge nogui and gui launch code
-[ ] remove white bg from splash screen logo and animate it on a12+
+[x] remove white bg from splash screen logo and animate it on a12+
 [x] add background with `surface` gradient in FirstRun screen
 [ ] remove any remaining artificial delays (except show logs automatically one)
 [x] add changelog inside app
