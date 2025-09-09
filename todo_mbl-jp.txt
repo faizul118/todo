@@ -38,4 +38,4 @@ Born on 20250908_1400
 [x] Log draco and mbl2 versions in logs
 [x] check if maesdk range operator is really correct
 [ ] remove minecraft module
-[ ] add this inside last of android block kts ndkVersion = "25.2.9519653"
+[ ] add this inside last of android block kts ndkVersion = "27.3.13750724"
