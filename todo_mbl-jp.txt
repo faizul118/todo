@@ -46,3 +46,4 @@ Born on 20250908_1400
 [x] show shader name in first run image
 [x] make first run bg stretch to device width 
 [ ] remove docprovider from manifest
+[ ] switch to old green select color firstrun
