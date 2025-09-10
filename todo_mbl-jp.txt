@@ -43,6 +43,6 @@ Born on 20250908_1400
 [ ] put the dynamic arch check on directlaunch mbl2
 [ ] make checkCompatibility return boolean based on a single arch (for mbl2 dynamic lib check)
 [x] show names of easter members on top right corner
-[ ] show shader name in first run image
-[ ] make first run bg stretch to device width 
-try
+[x] show shader name in first run image
+[x] make first run bg stretch to device width 
+[ ] remove docprovider from manifest
