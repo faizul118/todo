@@ -38,4 +38,10 @@ Born on 20250908_1400
 [x] Log draco and mbl2 versions in logs
 [x] check if maesdk range operator is really correct
 [ ] remove minecraft module
-[ ] add this inside last of android block kts ndkVersion = "27.3.13750724"
+[ ] add this inside last of android block kts ndkVersion = "27.3.13750724" [SKIPPED]
+[ ] make the the check device abis use the zip central directory thing
+[ ] put the dynamic arch check on directlaunch mbl2
+[ ] make checkCompatibility return boolean based on a single arch (for mbl2 dynamic lib check)
+[ ] show names of easter members on top right corner
+[ ] show shader name in first run image
+[ ] make first run bg stretch to device width
