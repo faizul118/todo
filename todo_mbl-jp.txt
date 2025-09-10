@@ -45,3 +45,4 @@ Born on 20250908_1400
 [ ] show names of easter members on top right corner
 [ ] show shader name in first run image
 [ ] make first run bg stretch to device width 
+try
