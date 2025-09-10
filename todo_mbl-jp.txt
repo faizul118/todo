@@ -22,7 +22,7 @@ Born on 20250908_1400
 [x] centralize todo 
 [ ] start using keepachangelog <https://keepachangelog.com/en/1.0.0/>
 [ ] add a donation button with forbidden electronic coin name and whatever site enderman prefers
-[ ] remove startMoinkraft function, integrate it inside initLauncherUnified
+[x] remove startMoinkraft function, integrate it inside initLauncherUnified
 [x] remove direct launch toast (starting with...)
 [x] fix double toast for direct launch (a13, confirmation needed)
 [x] add splash for direct launch A11 and lower
@@ -42,7 +42,7 @@ Born on 20250908_1400
 [ ] make the the check device abis use the zip central directory thing
 [ ] put the dynamic arch check on directlaunch mbl2
 [ ] make checkCompatibility return boolean based on a single arch (for mbl2 dynamic lib check)
-[ ] show names of easter members on top right corner
+[x] show names of easter members on top right corner
 [ ] show shader name in first run image
 [ ] make first run bg stretch to device width 
 try
