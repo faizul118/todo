@@ -47,3 +47,4 @@ Born on 20250908_1400
 [x] make first run bg stretch to device width 
 [x] remove docprovider from manifest
 [x] switch to old green select color firstrun
+[ ] add bounceClickable to murgi 
