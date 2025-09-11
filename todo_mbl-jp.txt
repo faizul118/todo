@@ -45,5 +45,5 @@ Born on 20250908_1400
 [x] show names of easter members on top right corner
 [x] show shader name in first run image
 [x] make first run bg stretch to device width 
-[ ] remove docprovider from manifest
+[x] remove docprovider from manifest
 [ ] switch to old green select color firstrun
