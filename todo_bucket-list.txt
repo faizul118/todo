@@ -1,9 +1,11 @@
+[ ] wonder egg priority
+
 // doraemon
 // ?/? = SE/EP unknown
-[ ] Hum Gian Ko Wapas Layenge (SE/EP unknown)
-[ ] game book (SE/EP unknown)
+[x] Hum Gian Ko Wapas Layenge (SE/EP unknown) (very good episode)
+[x] game book (SE/EP unknown)
 [ ] body swap leaf (ep about a man getting back his dog named benjo?, SE/EP unknown)
-[ ] answer pet bottle
+[x] answer pet bottle (partially watched)
 [ ] Nobita banega Cindrella ?/?
 [ ] travel window set SE09EP947 // also check anivortex plus india country level domain
 [ ] sample letter pen ?/?
